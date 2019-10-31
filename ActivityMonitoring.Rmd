@@ -1,0 +1,105 @@
+---
+title: "Course Project 1"
+author: "Lawrence Gulliver"
+date: "31/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(lubridate)
+library(dplyr)
+```
+
+# Activity Monitoring
+
+This project aims to cover the objectives provided in the Course 1 Peer Assessment of the Reproducable Research course of Coursera:
+
+1. Load and preprocess data
+1. What is the mean total number of steps taken per day?
+1. What is the average daily activity pattern?
+1. Impute missing values
+1. Are there differences in activity patterns between weekdays and weekends?
+
+## Load and preprocess data
+
+The data first needs loading into R, for which we use the readr package:
+
+```{r}
+amdata <- read_csv(
+    "activity.zip",
+    col_types = cols(steps = col_integer(), date = col_date(), interval = col_integer())
+)
+amdata
+```
+
+By providing the formats to read_csv we can set the types of the columns, but the interval (textual format "HHMM" with leading zeroes truncated) requires further manupulation. Here we use sprintf to add the leading zeroes back in, then strptime to convert the time with a strict format. Because R does not have a class for "time", we then take the difference between each resulting datetime and midnight which gives us a timespan in minutes.
+
+This is important, because the integers 55 and 100 have a difference of 45, while in the data these same values denote 55 minutes and 1 hour, a difference of only 5 minutes. Leaving this as class Integer would skew any graphs produced.
+
+```{r}
+amdata$interval <- difftime(
+    strptime(sprintf("%04.0f", amdata$interval), format = "%H%M"),
+    strptime("0000", format = "%H%M"),
+    units = "mins"
+)
+```
+
+## What is the mean total number of steps taken per day?
+> For this part of the assignment, you can ignore the missing values in the dataset.
+>
+>    - Make a histogram of the total number of steps taken each day
+>    - Calculate and report the mean and median total number of steps taken per day
+
+We can answer this question quite simply by using the dplyr package to sum the total steps for each day:
+
+```{r}
+amdata_g_date <- group_by(amdata, date)
+dailysteps <- summarise(amdata_g_date, steps = sum(steps, na.rm = TRUE))
+hist(dailysteps$steps, breaks = 10, xlab = "Steps", main = "Histogram of Number of Steps Per Day")
+```
+
+From there it is quite simple to calculate the mean and median:
+
+```{r}
+mean(dailysteps$steps, na.rm = TRUE)
+median(dailysteps$steps, na.rm = TRUE)
+```
+
+## What is the average daily activity pattern?
+> - Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+> - Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+For this objective we again use dplyr to summarise the data, this time to get the mean of the steps per interval bracket:
+
+```{r}
+amdata_g_interval <- group_by(amdata, interval)
+intervalsteps <- summarise(amdata_g_interval, steps = mean(steps, na.rm = TRUE))
+plot(
+    x = as.numeric(intervalsteps$interval / 60),
+    y = intervalsteps$steps,    # Convert to hours
+    type = "l",
+    xlab = "Hour of Day",
+    ylab = "Mean Steps Per 5min Interval",
+    main = "Mean Steps Over a Day",
+    xaxp = c(0, 24, 8)
+)
+```
+
+To get the interval with the highest average number of steps, we can use which.max. This is then added to any date (current date used for simplicity) and formatted in HH:MM format. 
+
+```{r}
+format(as_datetime(Sys.Date()) + intervalsteps[which.max(intervalsteps$steps),]$interval, "%H:%M")
+```
+
+
+
+## Impute missing values
+
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+
+

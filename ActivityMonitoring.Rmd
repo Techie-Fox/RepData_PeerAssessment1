@@ -1,5 +1,5 @@
 ---
-title: "Course Project 1"
+title: "Activity Monitoring"
 author: "Lawrence Gulliver"
 date: "31/10/2019"
 output: html_document
@@ -11,8 +11,6 @@ library(readr)
 library(lubridate)
 library(dplyr)
 ```
-
-# Activity Monitoring
 
 This project aims to cover the objectives provided in the Course 1 Peer Assessment of the Reproducable Research course of Coursera:
 
@@ -34,9 +32,9 @@ amdata <- read_csv(
 amdata
 ```
 
-By providing the formats to read_csv we can set the types of the columns, but the interval (textual format "HHMM" with leading zeroes truncated) requires further manupulation. Here we use sprintf to add the leading zeroes back in, then strptime to convert the time with a strict format. Because R does not have a class for "time", we then take the difference between each resulting datetime and midnight which gives us a timespan in minutes.
+By providing the formats to read_csv we can set the types of the columns, but the interval (textual format "HHMM" with leading zeroes truncated) requires further manupulation. Here we use sprintf to add the leading zeroes back in, then strptime to convert the time with a defined format. Because R does not have a class for "time", we then take the difference between each resulting datetime and midnight which gives us a timespan in minutes.
 
-This is important, because the integers 55 and 100 have a difference of 45, while in the data these same values denote 55 minutes and 1 hour, a difference of only 5 minutes. Leaving this as class Integer would skew any graphs produced.
+This is important, because the integers 55 and 100 have a difference of 45, while in the data these same values denote 55 minutes and 1 hour, a difference of only 5 minutes. Leaving this column as class Integer would skew most analysis performed on it.
 
 ```{r}
 amdata$interval <- difftime(
@@ -46,13 +44,19 @@ amdata$interval <- difftime(
 )
 ```
 
+We can also add the Day of Week for easy summaries later:
+
+```{r}
+amdata$weekday <- weekdays(amdata$date)
+```
+
 ## What is the mean total number of steps taken per day?
 > For this part of the assignment, you can ignore the missing values in the dataset.
 >
 >    - Make a histogram of the total number of steps taken each day
 >    - Calculate and report the mean and median total number of steps taken per day
 
-We can answer this question quite simply by using the dplyr package to sum the total steps for each day:
+We can answer this question by using the dplyr package to sum the total steps for each day:
 
 ```{r}
 amdata_g_date <- group_by(amdata, date)
@@ -93,11 +97,34 @@ To get the interval with the highest average number of steps, we can use which.m
 format(as_datetime(Sys.Date()) + intervalsteps[which.max(intervalsteps$steps),]$interval, "%H:%M")
 ```
 
-
-
 ## Impute missing values
+> Note that there are a number of days/intervals where there are missing values (coded as NA\color{red}{\verb|NA|}NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+>
+>    - Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+>    - Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+>    - Create a new dataset that is equal to the original dataset but with the missing data filled in.
+>    - Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
 
+The read_csv function has automatically recognised NA values, so we only need to pass it to is.na and then the table function to get a count:
 
+```{r}
+table(is.na(amdata$steps))
+```
+So there are 2,304 missing values that we need to impute. For a more detailed analysis we might take the mean of each interval per weekday, then for each missing value take the mean of that interval for that day and scale it based on the previous and next values and their associated averages.
+
+However, for the purpose of the remaining analysis, simply taking the mean for that weekday and interval should suffice. There are 288 intervals and 7 days to take the mean of, a total of 2,016 calculations, so rather than calculate each of 2,304 cases individually it will be slightly more efficient (and much easier) to create a lookup table to refer to, for which we use dplyr to group and summarise:
+
+```{r}
+amdata_g_date_interval <- group_by(amdata, weekday, interval)
+imputelookup <- summarise(amdata_g_date_interval, mean(steps, na.rm = TRUE))
+```
+
+Now for the missing values, we can simply look up the correct value 
+
+```{r}
+missingvalues <- is.na(amdata$steps)
+amdata[missingvalues,]$steps <- missingvalues[]
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
 

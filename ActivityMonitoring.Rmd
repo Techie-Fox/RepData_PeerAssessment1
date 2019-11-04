@@ -1,5 +1,5 @@
 ---
-title: "Activity Monitoring"
+title: "Reproducible Research: Peer Assessment 1"
 author: "Lawrence Gulliver"
 date: "31/10/2019"
 output: html_document
@@ -67,8 +67,11 @@ hist(dailysteps$steps, breaks = 10, xlab = "Steps", main = "Histogram of Number 
 From there it is quite simple to calculate the mean and median:
 
 ```{r}
-mean(dailysteps$steps, na.rm = TRUE)
-median(dailysteps$steps, na.rm = TRUE)
+amdatamean <- mean(dailysteps$steps, na.rm = TRUE)
+amdatamedian <- median(dailysteps$steps, na.rm = TRUE)
+
+amdatamean
+amdatamedian
 ```
 
 ## What is the average daily activity pattern?
@@ -91,7 +94,7 @@ plot(
 )
 ```
 
-To get the interval with the highest average number of steps, we can use which.max. This is then added to any date (current date used for simplicity) and formatted in HH:MM format. 
+To get the interval with the highest average number of steps, we can use `which.max`. This is then added to any date (current date used for simplicity) and formatted in HH:MM format. 
 
 ```{r}
 format(as_datetime(Sys.Date()) + intervalsteps[which.max(intervalsteps$steps),]$interval, "%H:%M")
@@ -105,28 +108,94 @@ format(as_datetime(Sys.Date()) + intervalsteps[which.max(intervalsteps$steps),]$
 >    - Create a new dataset that is equal to the original dataset but with the missing data filled in.
 >    - Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
 
-The read_csv function has automatically recognised NA values, so we only need to pass it to is.na and then the table function to get a count:
+The read_csv function has automatically recognised NA values, so we only need to pass it to `is.na` and then the `table` function to get a count:
 
 ```{r}
 table(is.na(amdata$steps))
 ```
-So there are 2,304 missing values that we need to impute. For a more detailed analysis we might take the mean of each interval per weekday, then for each missing value take the mean of that interval for that day and scale it based on the previous and next values and their associated averages.
+So there are 2,304 missing values that we need to impute.
 
-However, for the purpose of the remaining analysis, simply taking the mean for that weekday and interval should suffice. There are 288 intervals and 7 days to take the mean of, a total of 2,016 calculations, so rather than calculate each of 2,304 cases individually it will be slightly more efficient (and much easier) to create a lookup table to refer to, for which we use dplyr to group and summarise:
+For the purpose of the remaining analysis, simply taking the mean for that weekday and interval should suffice. There are 288 intervals and 7 days to take the mean of, a total of 2,016 calculations, so rather than calculate each of 2,304 cases individually it will be slightly more efficient (and much easier) to create a lookup table to refer to, for which we use dplyr to group and summarise:
 
 ```{r}
 amdata_g_date_interval <- group_by(amdata, weekday, interval)
-imputelookup <- summarise(amdata_g_date_interval, mean(steps, na.rm = TRUE))
+imputelookup <- summarise(amdata_g_date_interval, meansteps = mean(steps, na.rm = TRUE))
 ```
 
-Now for the missing values, we can simply look up the correct value 
+Now for the missing values, we can simply look up the mean for that weekday and interval by using `left_join` on the missing values and lookup table, then extracting the meansteps property. We save this into a new dataframe:
 
 ```{r}
-missingvalues <- is.na(amdata$steps)
-amdata[missingvalues,]$steps <- missingvalues[]
+amdatafull <- amdata
+missingvalues <- is.na(amdatafull$steps)
+amdatafull[missingvalues,]$steps <- left_join(amdatafull[missingvalues,], imputelookup, by = c("weekday", "interval"))$meansteps
 ```
 
+Now that we have a complete dataset, we can compare it to the original using a histogram generated with the same method, using dplyr to group and summarise.
+
+We can most tidily show this data by plotting a histogram of the new imputed data, then the original data over the top of it using an alpha channel:
+
+```{r}
+# Create plot based on previously plotted data
+    oplot <- hist(dailysteps$steps, breaks = 10, plot = FALSE)
+
+# Create new plot based on imputed data
+    amdatafull_g_date <- group_by(amdatafull, date)
+    dailystepsfull <- summarise(amdatafull_g_date, steps = sum(steps, na.rm = TRUE))
+    iplot <- hist(dailystepsfull$steps, breaks = 10, plot = FALSE)
+
+# Overlay the plots using a 1/2 alpha channel so that both are visible
+    plot(iplot, col = rgb(0, 1, 0, 1/2), xlab = "Steps", main = "Histogram of Number of Steps Per Day")
+    plot(oplot, col = rgb(0, 0, 1, 1/2), add = TRUE)
+    legend(x = "topright", fill = c(rgb(0, 1, 0, 1/2), rgb(0, 0, 1, 1/2)), legend = c("Imputed", "Original"))
+
+```
+
+It looks like all the days that were corrected were moved into the main cluster, which we could expect because we used the mean to impute. Only the lowest bucket of days was affected, however, implying that all missing data was for most or all of certain days (likely because the monitor was not worn at all) rather than being more sporadic.
+
+From the graph it appears the mean and median will not change much, however because we imputed based on the weekday it is likely to have changed.
+
+```{r}
+mean(dailystepsfull$steps, na.rm = TRUE)
+median(dailystepsfull$steps, na.rm = TRUE)
+```
+
+The original mean (`r round(amdatamean, 0)`) has increased by over 15%, however the median (`r amdatamedian`) has gone up by less than 6%, which is in line with what we expect for moving low values to around the mean.
+
+When performing analysis on this data, we can now expect more accurate results as we are not working with data heavily skewed towards inactivity.
+
 ## Are there differences in activity patterns between weekdays and weekends?
+> For this part the weekdays() function may be of some help here. Use the dataset with the filled-in missing values for this part.
+>
+>    - Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+>    - Make a panel plot containing a time series plot (i.e. type = "l"\color{red}{\verb|type = "l"|}type="l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
+
+Because we already have the day of the week, we can create a true/false for whether the day is a weekend, and then convert that to a factor:
+
+```{r}
+isweekend <- amdatafull$weekday %in% c("Saturday", "Sunday")
+amdatafull$daytype <- as.factor(c("Weekday", "Weekend")[as.numeric(isweekend) + 1])
+
+```
+
+Now we can create plots based on this factor.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

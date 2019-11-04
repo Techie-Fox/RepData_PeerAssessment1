@@ -7,9 +7,6 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(readr)
-library(lubridate)
-library(dplyr)
 ```
 
 This project aims to cover the objectives provided in the Course 1 Peer Assessment of the Reproducable Research course of Coursera:
@@ -20,9 +17,17 @@ This project aims to cover the objectives provided in the Course 1 Peer Assessme
 1. Impute missing values
 1. Are there differences in activity patterns between weekdays and weekends?
 
+These are the packages we'll be using in this analysis:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(readr)
+library(lubridate)
+library(dplyr)
+library(lattice)
+```
+
 ## Load and preprocess data
 
-The data first needs loading into R, for which we use the readr package:
+The data first needs loading into R, for which we use the readr package to extract directly from the compressed source:
 
 ```{r}
 amdata <- read_csv(
@@ -94,7 +99,7 @@ plot(
 )
 ```
 
-To get the interval with the highest average number of steps, we can use `which.max`. This is then added to any date (current date used for simplicity) and formatted in HH:MM format. 
+To get the interval with the highest average number of steps, we can use `which.max` which is then added to any date (current date used for simplicity) and formatted in HH:MM format:
 
 ```{r}
 format(as_datetime(Sys.Date()) + intervalsteps[which.max(intervalsteps$steps),]$interval, "%H:%M")
@@ -143,23 +148,23 @@ We can most tidily show this data by plotting a histogram of the new imputed dat
     dailystepsfull <- summarise(amdatafull_g_date, steps = sum(steps, na.rm = TRUE))
     iplot <- hist(dailystepsfull$steps, breaks = 10, plot = FALSE)
 
-# Overlay the plots using a 1/2 alpha channel so that both are visible
-    plot(iplot, col = rgb(0, 1, 0, 1/2), xlab = "Steps", main = "Histogram of Number of Steps Per Day")
-    plot(oplot, col = rgb(0, 0, 1, 1/2), add = TRUE)
+# Overlay the plots using a 0.5 alpha channel so that both are visible
+    plot(iplot, col = rgb(0, 1, 0, 0.5), xlab = "Steps", main = "Histogram of Number of Steps Per Day")
+    plot(oplot, col = rgb(0, 0, 1, 0.5), add = TRUE)
     legend(x = "topright", fill = c(rgb(0, 1, 0, 1/2), rgb(0, 0, 1, 1/2)), legend = c("Imputed", "Original"))
 
 ```
 
 It looks like all the days that were corrected were moved into the main cluster, which we could expect because we used the mean to impute. Only the lowest bucket of days was affected, however, implying that all missing data was for most or all of certain days (likely because the monitor was not worn at all) rather than being more sporadic.
 
-From the graph it appears the mean and median will not change much, however because we imputed based on the weekday it is likely to have changed.
+Because we added values to days that otherwise accounted for (or close to) 0 steps, we can theorise the mean and median will go up:
 
 ```{r}
 mean(dailystepsfull$steps, na.rm = TRUE)
 median(dailystepsfull$steps, na.rm = TRUE)
 ```
 
-The original mean (`r round(amdatamean, 0)`) has increased by over 15%, however the median (`r amdatamedian`) has gone up by less than 6%, which is in line with what we expect for moving low values to around the mean.
+The original mean (`r round(amdatamean, 0)`) has increased by over 15%, and the median (`r amdatamedian`) has gone up by just under 6%, which is in line with what we expect for moving low values to around the mean.
 
 When performing analysis on this data, we can now expect more accurate results as we are not working with data heavily skewed towards inactivity.
 
@@ -167,35 +172,32 @@ When performing analysis on this data, we can now expect more accurate results a
 > For this part the weekdays() function may be of some help here. Use the dataset with the filled-in missing values for this part.
 >
 >    - Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
->    - Make a panel plot containing a time series plot (i.e. type = "l"\color{red}{\verb|type = "l"|}type="l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
+>    - Make a panel plot containing a time series plot (i.e. type="l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
 
 Because we already have the day of the week, we can create a true/false for whether the day is a weekend, and then convert that to a factor:
 
 ```{r}
 isweekend <- amdatafull$weekday %in% c("Saturday", "Sunday")
-amdatafull$daytype <- as.factor(c("Weekday", "Weekend")[as.numeric(isweekend) + 1])
+amdatafull$daytype <- factor(c("Weekday", "Weekend")[as.numeric(isweekend) + 1])
 
 ```
 
-Now we can create plots based on this factor.
+Now we can create plots based on this factor. 
 
+```{r}
+amdatafull_g_interval_daytype <- group_by(amdatafull, interval, daytype)
+daytypesummary <- summarise(amdatafull_g_interval_daytype, meansteps = mean(steps))
+xyplot(meansteps ~ as.numeric(interval) / 60 | daytype,
+   data = daytypesummary,
+   type = "l",
+   layout = c(1, 2),
+   xlim = c(0, 24),
+   xlab = "Hour of Day",
+   ylab = "Mean Steps Per 5min Interval",
+   main = "Comparison of Mean Steps",
+   index.cond = list(c(2, 1))    # Weekend wants to display first, reverse ordering
+)
 
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+We see more and taller spikes on weekends than on weekdays, but weekdays start earlier and have a larger spike at 9am. We can theorise weekdays spike before and after the times the subjects attended work or education, but weekends were just more generally active throughout in the subject's free time.
